@@ -452,6 +452,82 @@ class Google_sync
     }
 
     /**
+     * Get busy periods from a Google Calendar within a time range.
+     *
+     * Transparent (Free) and cancelled events are ignored. This is used for
+     * secondary conflict calendars that must affect availability without
+     * receiving Easy!Appointments bookings themselves.
+     *
+     * @param string $google_calendar Google Calendar ID.
+     * @param string $start Start datetime (RFC3339-compatible).
+     * @param string $end End datetime (RFC3339-compatible).
+     *
+     * @return array<int,array{start:int,end:int}>
+     *
+     * @throws Google\Service\Exception
+     */
+    public function get_busy_periods(string $google_calendar, string $start, string $end): array
+    {
+        $params = [
+            'timeMin' => (new DateTime($start))->format(DateTimeInterface::RFC3339),
+            'timeMax' => (new DateTime($end))->format(DateTimeInterface::RFC3339),
+            'singleEvents' => true,
+            'orderBy' => 'startTime',
+            'maxResults' => 2500,
+        ];
+
+        $events = $this->service->events->listEvents($google_calendar, $params);
+        $busy_periods = [];
+
+        do {
+            foreach ($events->getItems() as $event) {
+                if ($event->getStatus() === 'cancelled') {
+                    continue;
+                }
+
+                if (strcasecmp((string) $event->getTransparency(), 'transparent') === 0) {
+                    continue;
+                }
+
+                $event_start = $event->getStart();
+                $event_end = $event->getEnd();
+
+                if (!$event_start || !$event_end) {
+                    continue;
+                }
+
+                if ($event_start->getDateTime() !== null && $event_end->getDateTime() !== null) {
+                    $busy_periods[] = [
+                        'start' => (new DateTime($event_start->getDateTime()))->getTimestamp(),
+                        'end' => (new DateTime($event_end->getDateTime()))->getTimestamp(),
+                    ];
+                    continue;
+                }
+
+                if ($event_start->getDate() !== null && $event_end->getDate() !== null) {
+                    $all_day_start = new DateTime($event_start->getDate() . ' 00:00:00');
+                    $all_day_end = new DateTime($event_end->getDate() . ' 00:00:00');
+                    $busy_periods[] = [
+                        'start' => $all_day_start->getTimestamp(),
+                        'end' => $all_day_end->getTimestamp(),
+                    ];
+                }
+            }
+
+            $next_page_token = $events->getNextPageToken();
+
+            if (empty($next_page_token)) {
+                break;
+            }
+
+            $params['pageToken'] = $next_page_token;
+            $events = $this->service->events->listEvents($google_calendar, $params);
+        } while (true);
+
+        return $busy_periods;
+    }
+
+    /**
      * Get a Google Calendar event.
      *
      * @param array $provider Provider data.
