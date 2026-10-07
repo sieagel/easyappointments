@@ -54,16 +54,5 @@ class Config
     // const GOOGLE_CLIENT_ID = '';
     // const GOOGLE_CLIENT_SECRET = '';
 
-    // Optional: Calendar used for provider write/sync after Google OAuth.
-    // Leave empty to use the provider's Google Calendar default (usually `primary`).
-    // const GOOGLE_DEFAULT_CALENDAR = '';
-
-    // Optional: additional Google Calendar used only for conflict checking on selected
-    // in-person services. This calendar is NOT used for writing bookings.
-    // Do not publish your real Calendar ID in a public repository; set it in your local config.php.
-    // const GOOGLE_SECONDARY_CONFLICT_CALENDAR = '';
-
-    // Optional: service-location keywords that should use the secondary conflict calendar.
-    // Example: ['Center Manas']
-    // const GOOGLE_SECONDARY_CONFLICT_LOCATION_KEYWORDS = ['Center Manas'];
-}
+    // Calendar routing is configured in Settings > Integrations > Google Calendar.
+    // Do not put real Google Calendar IDs in this file.
