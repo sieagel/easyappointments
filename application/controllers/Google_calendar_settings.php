@@ -23,17 +23,18 @@ class Google_calendar_settings extends EA_Controller
     {
         $user_id = session('user_id');
 
+        // Show all providers so a Google account can be connected from this page.
+        // Previously we filtered to already-connected providers, which made the OAuth
+        // flow impossible when google_token was empty.
         $providers = [];
         foreach ($this->providers_model->get() as $provider) {
-            if (
-                filter_var($provider['settings']['google_sync'] ?? false, FILTER_VALIDATE_BOOLEAN) &&
-                !empty($provider['settings']['google_token'])
-            ) {
-                $providers[] = [
-                    'id' => (int) $provider['id'],
-                    'name' => trim($provider['first_name'] . ' ' . $provider['last_name']),
-                ];
-            }
+            $providers[] = [
+                'id' => (int) $provider['id'],
+                'name' => trim($provider['first_name'] . ' ' . $provider['last_name']),
+                'google_connected' =>
+                    filter_var($provider['settings']['google_sync'] ?? false, FILTER_VALIDATE_BOOLEAN) &&
+                    !empty($provider['settings']['google_token']),
+            ];
         }
 
         $selected_provider_id = (int) setting('google_calendar_provider_id', 0);
