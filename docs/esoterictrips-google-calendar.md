@@ -1,47 +1,53 @@
 # EsotericTrips Google Calendar extensions
 
-This fork keeps the Easy!Appointments 1.6.0 Google Calendar architecture and adds three targeted improvements.
+This fork keeps the Easy!Appointments 1.6.0 Google Calendar architecture and adds targeted improvements for explicit calendar routing and Google Meet persistence.
 
-## 1. Provider Google Calendar selection
+## 1. Explicit calendar routing in the E!A UI
 
-After Google OAuth, the provider can select the concrete Google Calendar used for Easy!Appointments synchronization. The selected calendar is stored as the provider's `google_calendar` setting.
+Calendar routing is configured at:
+
+**Settings → Integrations → Google Calendar**
+
+The administrator selects:
+
+- **Google Calendar account** — the connected E!A provider account whose OAuth token is used.
+- **Write calendar** — the one Google Calendar where E!A creates and updates appointments.
+- **Online conflict calendars** — one or more calendars that are read for conflicts for online services.
+- **Live conflict calendars** — one or more calendars that are read for conflicts for in-person/live services.
+
+The write calendar and conflict calendars are independent. A calendar is only read for conflicts when explicitly selected.
+
+No Google Calendar is silently assumed by this routing layer.
 
 ## 2. Google Meet persistence
 
-Google Meet conference creation is asynchronous. The integration now retries fetching the event when the conference is still pending and stores the resulting video URI in `appointments.meeting_link`.
+Google Meet conference creation is asynchronous. The integration retries fetching the event when the conference is still pending and stores the resulting video URI in `appointments.meeting_link`.
 
 The appointment array is passed by reference through synchronization so the saved Meet URL is not overwritten when the Google event ID is saved.
 
-## 3. Secondary conflict calendar
+The appointment is reloaded before notifications are rendered so the confirmation email can use the persisted Meet link.
 
-A second Google Calendar can be used only for availability conflicts on selected service locations.
+## 3. Conflict checking
 
-Add the following optional constants to the private root `config.php` (do not commit real Calendar IDs):
+For each booking request, E!A checks the explicitly selected conflict calendars for the relevant service type:
 
-```php
-const GOOGLE_DEFAULT_CALENDAR = 'your-primary-calendar-id';
-const GOOGLE_SECONDARY_CONFLICT_CALENDAR = 'your-secondary-calendar-id';
-const GOOGLE_SECONDARY_CONFLICT_LOCATION_KEYWORDS = ['Center Manas'];
-```
+- **Online service** → calendars selected under **Online conflict calendars**.
+- **Live/in-person service** → calendars selected under **Live conflict calendars**.
 
-- The primary/provider calendar remains the write calendar.
-- The secondary calendar is read-only for conflict checking.
-- Services whose location contains one of the configured keywords are blocked when the secondary calendar is busy.
-- Online services are unaffected.
-- No booking is written to the secondary calendar.
+If a configured conflict calendar cannot be read, availability fails closed and the affected slots are not offered.
 
-If `GOOGLE_DEFAULT_CALENDAR` is empty, the normal Easy!Appointments default (`primary`) is used and the provider calendar can still be selected through the Google Calendar sync UI.
-
-## Security
-
-Google API HTTP requests keep TLS certificate verification enabled.
+Conflict calendars are read-only. E!A never writes bookings to them.
 
 ## Current target workflow
 
 ### Online
-Leon calendar → conflict check → write to Leon calendar.
+Selected online conflict calendars → conflict check → selected write calendar.
 
-### Center Manas / live
-Leon calendar + configured secondary Manas calendar → conflict check → write to Leon calendar.
+### Live / Center Manas
+Selected live conflict calendars (for example Leon + Manas) → conflict check → selected write calendar.
 
-The secondary calendar is intentionally not used as a booking destination.
+The write destination is always the calendar selected explicitly in E!A settings.
+
+## Security
+
+Google API HTTP requests keep TLS certificate verification enabled.
