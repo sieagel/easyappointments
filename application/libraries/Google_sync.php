@@ -491,6 +491,8 @@ class Google_sync
      */
     public function get_busy_periods(string $google_calendar, string $start, string $end): array
     {
+        $google_calendar = $this->resolve_calendar_identifier($google_calendar);
+
         $params = [
             'timeMin' => (new DateTime($start))->format(DateTimeInterface::RFC3339),
             'timeMax' => (new DateTime($end))->format(DateTimeInterface::RFC3339),
@@ -548,6 +550,56 @@ class Google_sync
         } while (true);
 
         return $busy_periods;
+    }
+
+    /**
+     * Resolve a Google Calendar ID or a human-readable calendar name.
+     *
+     * Calendar IDs are used as-is. For convenience, a configured secondary
+     * calendar may instead be specified by its visible calendar name (for
+     * example "Manas"). This keeps private calendar IDs out of the installation
+     * package and public repository.
+     *
+     * @param string $identifier Google Calendar ID or visible calendar name.
+     *
+     * @return string Resolved Google Calendar ID.
+     *
+     * @throws Google\Service\Exception
+     */
+    private function resolve_calendar_identifier(string $identifier): string
+    {
+        $identifier = trim($identifier);
+
+        if ($identifier === '' || $identifier === 'primary' || str_contains($identifier, '@group.calendar.google.com')) {
+            return $identifier;
+        }
+
+        $calendars = $this->service->calendarList->listCalendarList([
+            'maxResults' => 250,
+            'showDeleted' => false,
+        ]);
+
+        do {
+            foreach ($calendars->getItems() as $calendar) {
+                if (strcasecmp(trim((string) $calendar->getSummary()), $identifier) === 0) {
+                    return $calendar->getId();
+                }
+            }
+
+            $next_page_token = $calendars->getNextPageToken();
+
+            if (empty($next_page_token)) {
+                break;
+            }
+
+            $calendars = $this->service->calendarList->listCalendarList([
+                'maxResults' => 250,
+                'showDeleted' => false,
+                'pageToken' => $next_page_token,
+            ]);
+        } while (true);
+
+        throw new RuntimeException('Google Calendar not found by ID or name: ' . $identifier);
     }
 
     /**
