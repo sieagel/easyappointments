@@ -15,6 +15,7 @@ class Google_calendar_settings extends EA_Controller
 
         $this->load->model('roles_model');
         $this->load->model('providers_model');
+        $this->load->model('users_model');
         $this->load->model('settings_model');
         $this->load->library('google_sync');
     }
@@ -24,16 +25,34 @@ class Google_calendar_settings extends EA_Controller
         $user_id = session('user_id');
 
         // Show all providers so a Google account can be connected from this page.
-        // Previously we filtered to already-connected providers, which made the OAuth
-        // flow impossible when google_token was empty.
+        // Also include the currently logged-in user when they are not assigned the
+        // provider role. Easy!Appointments installations commonly use an administrator
+        // account as the actual service/calendar owner.
         $providers = [];
+        $provider_ids = [];
+
         foreach ($this->providers_model->get() as $provider) {
+            $provider_id = (int) $provider['id'];
+            $provider_ids[] = $provider_id;
+
             $providers[] = [
-                'id' => (int) $provider['id'],
+                'id' => $provider_id,
                 'name' => trim($provider['first_name'] . ' ' . $provider['last_name']),
                 'google_connected' =>
                     filter_var($provider['settings']['google_sync'] ?? false, FILTER_VALIDATE_BOOLEAN) &&
                     !empty($provider['settings']['google_token']),
+            ];
+        }
+
+        if ($user_id && !in_array((int) $user_id, $provider_ids, true)) {
+            $user = $this->users_model->find((int) $user_id);
+
+            $providers[] = [
+                'id' => (int) $user['id'],
+                'name' => trim($user['first_name'] . ' ' . $user['last_name']),
+                'google_connected' =>
+                    filter_var($user['settings']['google_sync'] ?? false, FILTER_VALIDATE_BOOLEAN) &&
+                    !empty($user['settings']['google_token']),
             ];
         }
 
