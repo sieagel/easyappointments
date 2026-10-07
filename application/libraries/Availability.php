@@ -43,6 +43,7 @@ class Availability
         $this->CI->load->model('working_plan_exceptions_model');
 
         $this->CI->load->library('ics_file');
+        $this->CI->load->library('google_sync');
     }
 
     /**
@@ -74,6 +75,13 @@ class Availability
 
             $available_hours = $this->generate_available_hours($date, $service, $available_periods);
         }
+
+        $available_hours = $this->apply_secondary_google_calendar_conflicts(
+            $date,
+            $service,
+            $provider,
+            $available_hours,
+        );
 
         $available_hours = $this->consider_book_advance_timeout($date, $available_hours, $provider);
 
@@ -568,6 +576,119 @@ class Availability
         }
 
         return $available_hours;
+    }
+
+    /**
+     * Remove appointment slots that overlap a configured secondary Google Calendar.
+     *
+     * The secondary calendar is used only for selected in-person service locations.
+     * It is read for conflicts but never receives Easy!Appointments bookings.
+     *
+     * @param string $date Selected date (Y-m-d).
+     * @param array $service Service data.
+     * @param array $provider Provider data.
+     * @param array $available_hours Candidate start times.
+     *
+     * @return array Filtered available start times.
+     *
+     * @throws Exception
+     */
+    protected function apply_secondary_google_calendar_conflicts(
+        string $date,
+        array $service,
+        array $provider,
+        array $available_hours,
+    ): array {
+        $calendar_id = (string) config('google_secondary_conflict_calendar', '');
+        $keywords = config('google_secondary_conflict_location_keywords', ['Center Manas']);
+
+        if ($calendar_id === '' || empty($available_hours)) {
+            return $available_hours;
+        }
+
+        $service_location = trim((string) ($service['location'] ?? ''));
+
+        if ($service_location === '' || empty($keywords)) {
+            return $available_hours;
+        }
+
+        $uses_secondary_calendar = false;
+
+        foreach ((array) $keywords as $keyword) {
+            $keyword = trim((string) $keyword);
+
+            if ($keyword !== '' && stripos($service_location, $keyword) !== false) {
+                $uses_secondary_calendar = true;
+                break;
+            }
+        }
+
+        if (!$uses_secondary_calendar) {
+            return $available_hours;
+        }
+
+        $google_token = $provider['settings']['google_token'] ?? null;
+
+        if (empty($google_token)) {
+            log_message(
+                'error',
+                'Google - Secondary conflict calendar is configured but provider has no Google token: ' . $provider['id'],
+            );
+            return [];
+        }
+
+        $google_token = json_decode($google_token, true);
+
+        if (empty($google_token['refresh_token'])) {
+            log_message(
+                'error',
+                'Google - Secondary conflict calendar is configured but provider has no refresh token: ' . $provider['id'],
+            );
+            return [];
+        }
+
+        $provider_timezone = new DateTimeZone($provider['timezone']);
+        $day_start = new DateTime($date . ' 00:00:00', $provider_timezone);
+        $day_end = (clone $day_start)->modify('+1 day');
+
+        $this->CI->google_sync->refresh_token($google_token['refresh_token']);
+        $busy_periods = $this->CI->google_sync->get_busy_periods(
+            $calendar_id,
+            $day_start->format(DateTimeInterface::RFC3339),
+            $day_end->format(DateTimeInterface::RFC3339),
+        );
+
+        if (empty($busy_periods)) {
+            return $available_hours;
+        }
+
+        $duration = (int) $service['duration'];
+        $filtered_hours = [];
+
+        foreach ($available_hours as $available_hour) {
+            $slot_start = new DateTime($date . ' ' . $available_hour . ':00', $provider_timezone);
+            $slot_end = (clone $slot_start)->modify('+' . $duration . ' minutes');
+
+            $slot_start_timestamp = $slot_start->getTimestamp();
+            $slot_end_timestamp = $slot_end->getTimestamp();
+            $conflicts = false;
+
+            foreach ($busy_periods as $busy_period) {
+                if (
+                    $slot_start_timestamp < $busy_period['end'] &&
+                    $slot_end_timestamp > $busy_period['start']
+                ) {
+                    $conflicts = true;
+                    break;
+                }
+            }
+
+            if (!$conflicts) {
+                $filtered_hours[] = $available_hour;
+            }
+        }
+
+        return $filtered_hours;
     }
 
     /**
