@@ -56,7 +56,10 @@ class Google_calendar_settings extends EA_Controller
         script_vars([
             'user_id' => $user_id,
             'role_slug' => session('role_slug'),
-            'google_calendar_settings' => array_merge(\n                filter_sensitive_settings($google_calendar_settings),\n                [['name' => 'google_client_secret', 'value' => setting('google_client_secret', '') !== '' ? '********' : '']],\n            ),
+            'google_calendar_settings' => array_merge(
+                filter_sensitive_settings($google_calendar_settings),
+                [['name' => 'google_client_secret', 'value' => setting('google_client_secret', '') !== '' ? '********' : '']],
+            ),
             'google_calendar_providers' => $providers,
         ]);
 
