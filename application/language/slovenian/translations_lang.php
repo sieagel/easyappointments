@@ -514,6 +514,7 @@ $lang['google_online_conflict_calendars'] = 'Koledarji za preverjanje – spletn
 $lang['google_online_conflict_calendars_info'] = 'Izbrani koledarji se samo berejo zaradi preverjanja zasedenosti pri spletnih storitvah.';
 $lang['google_live_conflict_calendars'] = 'Koledarji za preverjanje – termini v živo';
 $lang['google_live_conflict_calendars_info'] = 'Izbrani koledarji se samo berejo zaradi preverjanja zasedenosti pri terminih v živo oziroma na lokaciji.';
+$lang['google_calendar_select_in_settings'] = 'Google koledarje izberite v Nastavitve → Integracije → Google Koledar.';
 $lang['google_calendar_calendars_load_failed'] = 'Google koledarjev ni bilo mogoče naložiti.';
 $lang['google_calendar_info'] = 'Omogočite sinhronizacijo z Google Calendar za sinhronizacijo terminov z Google Calendar računi ponudnikov.';
 $lang['google_client_id'] = 'ID odjemalca';
