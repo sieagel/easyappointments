@@ -120,7 +120,7 @@ class Google extends EA_Controller
             // event would be pushed again and produce visible duplicates.
             try {
                 $existing_google_events = $CI->google_sync->get_sync_events(
-                    $provider['settings']['google_calendar'],
+                    $CI->google_sync->get_write_calendar($provider),
                     $start,
                     $end,
                 );
@@ -311,7 +311,7 @@ class Google extends EA_Controller
             }
 
             // Add Google Calendar events that do not exist in Easy!Appointments.
-            $google_calendar = $provider['settings']['google_calendar'];
+            $google_calendar = $CI->google_sync->get_write_calendar($provider);
 
             try {
                 $google_events = $CI->google_sync->get_sync_events($google_calendar, $start, $end);
