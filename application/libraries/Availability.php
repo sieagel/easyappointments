@@ -599,31 +599,21 @@ class Availability
         array $provider,
         array $available_hours,
     ): array {
-        $calendar_id = (string) config('google_secondary_conflict_calendar', '');
-        $keywords = config('google_secondary_conflict_location_keywords', ['Center Manas']);
-
-        if ($calendar_id === '' || empty($available_hours)) {
+        if (empty($available_hours)) {
             return $available_hours;
         }
 
         $service_location = trim((string) ($service['location'] ?? ''));
+        $is_online = stripos($service_location, 'online') !== false;
 
-        if ($service_location === '' || empty($keywords)) {
-            return $available_hours;
-        }
+        $setting_name = $is_online
+            ? 'google_online_conflict_calendars'
+            : 'google_live_conflict_calendars';
 
-        $uses_secondary_calendar = false;
+        $configured_calendars = json_decode((string) setting($setting_name, '[]'), true);
+        $calendar_ids = is_array($configured_calendars) ? array_values(array_filter($configured_calendars)) : [];
 
-        foreach ((array) $keywords as $keyword) {
-            $keyword = trim((string) $keyword);
-
-            if ($keyword !== '' && stripos($service_location, $keyword) !== false) {
-                $uses_secondary_calendar = true;
-                break;
-            }
-        }
-
-        if (!$uses_secondary_calendar) {
+        if (empty($calendar_ids)) {
             return $available_hours;
         }
 
@@ -632,7 +622,7 @@ class Availability
         if (empty($google_token)) {
             log_message(
                 'error',
-                'Google - Secondary conflict calendar is configured but provider has no Google token: ' . $provider['id'],
+                'Google conflict calendars are configured but provider has no Google token: ' . $provider['id'],
             );
             return [];
         }
@@ -642,7 +632,7 @@ class Availability
         if (empty($google_token['refresh_token'])) {
             log_message(
                 'error',
-                'Google - Secondary conflict calendar is configured but provider has no refresh token: ' . $provider['id'],
+                'Google conflict calendars are configured but provider has no refresh token: ' . $provider['id'],
             );
             return [];
         }
@@ -652,11 +642,33 @@ class Availability
         $day_end = (clone $day_start)->modify('+1 day');
 
         $this->CI->google_sync->refresh_token($google_token['refresh_token']);
-        $busy_periods = $this->CI->google_sync->get_busy_periods(
-            $calendar_id,
-            $day_start->format(DateTimeInterface::RFC3339),
-            $day_end->format(DateTimeInterface::RFC3339),
-        );
+
+        $busy_periods = [];
+
+        foreach ($calendar_ids as $calendar_id) {
+            try {
+                $busy_periods = array_merge(
+                    $busy_periods,
+                    $this->CI->google_sync->get_busy_periods(
+                        (string) $calendar_id,
+                        $day_start->format(DateTimeInterface::RFC3339),
+                        $day_end->format(DateTimeInterface::RFC3339),
+                    ),
+                );
+            } catch (Throwable $e) {
+                log_message(
+                    'error',
+                    'Google - Failed to read configured conflict calendar "' .
+                        $calendar_id .
+                        '": ' .
+                        $e->getMessage(),
+                );
+
+                // Fail closed: if a configured conflict calendar cannot be read,
+                // do not expose potentially unsafe availability slots.
+                return [];
+            }
+        }
 
         if (empty($busy_periods)) {
             return $available_hours;
