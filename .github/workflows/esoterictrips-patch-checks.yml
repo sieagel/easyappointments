@@ -14,45 +14,35 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.2'
+
       - name: PHP syntax check
         run: |
           php -l application/config/google.php
           php -l application/controllers/Google.php
+          php -l application/controllers/Google_calendar_settings.php
+          php -l application/controllers/Calendar.php
           php -l application/libraries/Availability.php
           php -l application/libraries/Google_sync.php
           php -l application/libraries/Synchronization.php
+          php -l esoterictrips-patch-install.php
 
-      - name: Build EsotericTrips one-click patch ZIP
+      - name: Build current EsotericTrips patch ZIP
         run: |
           rm -rf release
-          mkdir -p release/patch/application/config
-          mkdir -p release/patch/application/controllers
-          mkdir -p release/patch/application/libraries
-          cp application/config/google.php release/patch/application/config/google.php
-          cp application/controllers/Google.php release/patch/application/controllers/Google.php
-          cp application/controllers/Calendar.php release/patch/application/controllers/Calendar.php
-          cp application/libraries/Availability.php release/patch/application/libraries/Availability.php
-          cp application/libraries/Google_sync.php release/patch/application/libraries/Google_sync.php
-          cp application/libraries/Synchronization.php release/patch/application/libraries/Synchronization.php
+          mkdir -p release/patch
+
+          cp --parents             application/config/google.php             application/controllers/Google.php             application/controllers/Google_calendar_settings.php             application/controllers/Calendar.php             application/language/english/translations_lang.php             application/language/slovenian/translations_lang.php             application/libraries/Availability.php             application/libraries/Google_sync.php             application/libraries/Synchronization.php             application/views/pages/google_calendar_settings.php             assets/js/http/google_calendar_settings_http_client.js             assets/js/pages/google_calendar_settings.js             assets/js/utils/calendar_sync.js             release/patch/
+
           cp esoterictrips-patch-install.php release/esoterictrips-patch-install.php
-          printf '%s\n' \
-            'EsotericTrips Easy!Appointments patch' \
-            '' \
-            '1. Upload this ZIP to the Easy!Appointments installation directory.' \
-            '2. Extract it there.' \
-            '3. Open esoterictrips-patch-install.php in your browser.' \
-            '4. Click INSTALL PATCH.' \
-            '5. Test Google Meet and calendar conflict behaviour.' \
-            '6. DELETE esoterictrips-patch-install.php and the patch directory after successful testing.' \
-            '' \
-            'The installer preserves the existing root config.php and only adds the optional' \
-            'EsotericTrips calendar-routing constants. It does not replace database or OAuth credentials.' \
-            > release/README-INSTALL.txt
+
+          printf '%s\n'             'EsotericTrips Easy!Appointments current patch'             ''             '1. BACK UP the current Easy!Appointments files and database.'             '2. Upload this ZIP to the Easy!Appointments installation root.'             '3. Extract it there.'             '4. Open esoterictrips-patch-install.php in your browser.'             '5. Click INSTALL PATCH.'             '6. Configure Google Calendar routing in Settings > Integrations > Google Calendar.'             '7. Test an online booking, Google Meet generation and calendar conflict checking.'             '8. DELETE esoterictrips-patch-install.php and the patch directory after successful testing.'             ''             'This package contains the current branch files required for the EsotericTrips Google Calendar routing patch.'             'It does not replace the root config.php, database credentials or OAuth client credentials.'             > release/README-INSTALL.txt
+
           cd release
-          zip -r ../esoterictrips-ea-patch.zip .
-      - name: Upload one-click patch artifact
+          zip -r ../esoterictrips-ea-patch-current.zip .
+
+      - name: Upload current patch artifact
         uses: actions/upload-artifact@v4
         with:
-          name: esoterictrips-ea-patch
-          path: esoterictrips-ea-patch.zip
+          name: esoterictrips-ea-patch-current
+          path: esoterictrips-ea-patch-current.zip
           if-no-files-found: error
