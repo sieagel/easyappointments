@@ -15,6 +15,7 @@ class Google_calendar_settings extends EA_Controller
 
         $this->load->model('roles_model');
         $this->load->model('providers_model');
+        $this->load->model('settings_model');
         $this->load->library('google_sync');
     }
 
@@ -139,7 +140,21 @@ class Google_calendar_settings extends EA_Controller
                     continue;
                 }
 
-                // The browser only receives a masked marker, never the real secret.\n                // Empty or masked values mean “leave the existing secret unchanged”.\n                if (\n                    $item['name'] === 'google_client_secret' &&\n                    in_array(trim((string) ($item['value'] ?? '')), ['', '********'], true)\n                ) {\n                    continue;\n                }\n\n                setting([$item['name'] => $item['value'] ?? '']);
+                // The browser only receives a masked marker, never the real secret.\n                // Empty or masked values mean “leave the existing secret unchanged”.\n                if (\n                    $item['name'] === 'google_client_secret' &&\n                    in_array(trim((string) ($item['value'] ?? '')), ['', '********'], true)\n                ) {\n                    continue;\n                }\n\n                $existing_setting = $this->settings_model->query()
+                    ->where('name', $item['name'])
+                    ->get()
+                    ->row_array();
+
+                $setting_data = [
+                    'name' => $item['name'],
+                    'value' => $item['value'] ?? '',
+                ];
+
+                if (!empty($existing_setting)) {
+                    $setting_data['id'] = $existing_setting['id'];
+                }
+
+                $this->settings_model->save($setting_data);
             }
 
             response();
