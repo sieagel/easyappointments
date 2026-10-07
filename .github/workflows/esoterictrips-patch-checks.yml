@@ -35,20 +35,19 @@ jobs:
           cp application/libraries/Google_sync.php release/patch/application/libraries/Google_sync.php
           cp application/libraries/Synchronization.php release/patch/application/libraries/Synchronization.php
           cp esoterictrips-patch-install.php release/esoterictrips-patch-install.php
-          cat > release/README-INSTALL.txt <<'EOF'
-EsotericTrips Easy!Appointments patch
-
-1. Upload this ZIP to the Easy!Appointments installation directory.
-2. Extract it there.
-3. Open esoterictrips-patch-install.php in your browser.
-4. Click INSTALL PATCH.
-5. Test Google Meet and calendar conflict behaviour.
-6. DELETE esoterictrips-patch-install.php and the patch directory after successful testing.
-
-The installer preserves the existing root config.php and only adds the optional
-EsotericTrips calendar-routing constants. It does not replace database or OAuth
-credentials.
-EOF
+          printf '%s\n' \
+            'EsotericTrips Easy!Appointments patch' \
+            '' \
+            '1. Upload this ZIP to the Easy!Appointments installation directory.' \
+            '2. Extract it there.' \
+            '3. Open esoterictrips-patch-install.php in your browser.' \
+            '4. Click INSTALL PATCH.' \
+            '5. Test Google Meet and calendar conflict behaviour.' \
+            '6. DELETE esoterictrips-patch-install.php and the patch directory after successful testing.' \
+            '' \
+            'The installer preserves the existing root config.php and only adds the optional' \
+            'EsotericTrips calendar-routing constants. It does not replace database or OAuth credentials.' \
+            > release/README-INSTALL.txt
           cd release
           zip -r ../esoterictrips-ea-patch.zip .
       - name: Upload one-click patch artifact
