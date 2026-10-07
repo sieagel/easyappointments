@@ -270,14 +270,14 @@ class Google_sync
         }
 
         // Add the new event to the Google Calendar.
-        $created_event = $this->service->events->insert($$this->get_write_calendar($provider), $event, [
+        $created_event = $this->service->events->insert($this->get_write_calendar($provider), $event, [
             'conferenceDataVersion' => 1,
         ]);
 
         // Google creates the conference asynchronously. Fetch the event again when necessary
         // so the generated Meet URL is reliably stored in the appointment record.
         if (filter_var(setting('google_meet_link_generation'), FILTER_VALIDATE_BOOLEAN)) {
-            $meeting_link = $this->get_meeting_link($created_event, $$this->get_write_calendar($provider));
+            $meeting_link = $this->get_meeting_link($created_event, $this->get_write_calendar($provider));
 
             if ($meeting_link) {
                 $appointment['meeting_link'] = $meeting_link;
@@ -312,7 +312,7 @@ class Google_sync
         array $settings,
     ): Event {
         $event = $this->service->events->get(
-            $$this->get_write_calendar($provider),
+            $this->get_write_calendar($provider),
             $appointment['id_google_calendar'],
         );
 
@@ -360,7 +360,7 @@ class Google_sync
         }
 
         $updated_event = $this->service->events->update(
-            $$this->get_write_calendar($provider),
+            $this->get_write_calendar($provider),
             $event->getId(),
             $event,
             ['conferenceDataVersion' => 1],
@@ -372,7 +372,7 @@ class Google_sync
             filter_var(setting('google_meet_link_generation'), FILTER_VALIDATE_BOOLEAN) &&
             empty($appointment['meeting_link'])
         ) {
-            $meeting_link = $this->get_meeting_link($updated_event, $$this->get_write_calendar($provider));
+            $meeting_link = $this->get_meeting_link($updated_event, $this->get_write_calendar($provider));
 
             if ($meeting_link) {
                 $appointment['meeting_link'] = $meeting_link;
@@ -422,7 +422,7 @@ class Google_sync
      */
     public function delete_appointment(array $provider, string $google_event_id): void
     {
-        $this->service->events->delete($$this->get_write_calendar($provider), $google_event_id);
+        $this->service->events->delete($this->get_write_calendar($provider), $google_event_id);
     }
 
     /**
@@ -452,7 +452,7 @@ class Google_sync
         $event->setEnd($end);
 
         // Add the new event to the Google Calendar.
-        return $this->service->events->insert($$this->get_write_calendar($provider), $event);
+        return $this->service->events->insert($this->get_write_calendar($provider), $event);
     }
 
     /**
@@ -468,7 +468,7 @@ class Google_sync
     public function update_unavailability(array $provider, array $unavailability): Google_Service_Calendar_Event
     {
         $event = $this->service->events->get(
-            $$this->get_write_calendar($provider),
+            $this->get_write_calendar($provider),
             $unavailability['id_google_calendar'],
         );
 
@@ -485,7 +485,7 @@ class Google_sync
         $end = $this->build_event_datetime($unavailability['end_datetime'], $timezone, $is_all_day, true);
         $event->setEnd($end);
 
-        return $this->service->events->update($$this->get_write_calendar($provider), $event->getId(), $event);
+        return $this->service->events->update($this->get_write_calendar($provider), $event->getId(), $event);
     }
 
     /**
@@ -498,7 +498,7 @@ class Google_sync
      */
     public function delete_unavailability(array $provider, string $google_event_id): void
     {
-        $this->service->events->delete($$this->get_write_calendar($provider), $google_event_id);
+        $this->service->events->delete($this->get_write_calendar($provider), $google_event_id);
     }
 
     /**
@@ -641,7 +641,7 @@ class Google_sync
      */
     public function get_event(array $provider, string $google_event_id): Event
     {
-        return $this->service->events->get($$this->get_write_calendar($provider), $google_event_id);
+        return $this->service->events->get($this->get_write_calendar($provider), $google_event_id);
     }
 
     /**
