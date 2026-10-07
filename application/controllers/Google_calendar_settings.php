@@ -140,30 +140,21 @@ class Google_calendar_settings extends EA_Controller
                     continue;
                 }
 
+                $name = (string) $item['name'];
+                $value = $item['value'] ?? '';
+
                 // The browser only receives a masked marker, never the real secret.
                 // Empty or masked values mean “leave the existing secret unchanged”.
                 if (
-                    $item['name'] === 'google_client_secret' &&
-                    in_array(trim((string) ($item['value'] ?? '')), ['', '********'], true)
+                    $name === 'google_client_secret' &&
+                    in_array(trim((string) $value), ['', '********'], true)
                 ) {
                     continue;
                 }
 
-                $existing_setting = $this->settings_model->query()
-                    ->where('name', $item['name'])
-                    ->get()
-                    ->row_array();
-
-                $setting_data = [
-                    'name' => $item['name'],
-                    'value' => $item['value'] ?? '',
-                ];
-
-                if (!empty($existing_setting)) {
-                    $setting_data['id'] = $existing_setting['id'];
-                }
-
-                $this->settings_model->save($setting_data);
+                // Use E!A's canonical setting() helper so inserts and updates follow
+                // exactly the same persistence path as the rest of the application.
+                setting([$name => $value]);
             }
 
             response();
