@@ -13,7 +13,6 @@ class Google_calendar_settings extends EA_Controller
             show_error('Forbidden', 403);
         }
 
-        $this->load->model('users_model');
         $this->load->model('providers_model');
         $this->load->model('settings_model');
         $this->load->library('google_sync');
@@ -26,7 +25,7 @@ class Google_calendar_settings extends EA_Controller
         // Google Calendar ownership is independent from the E!A provider role.
         // List all users so the administrator can explicitly choose which E!A
         // account owns the Google OAuth connection.
-        foreach ($this->users_model->get(null, null, null, 'first_name ASC, last_name ASC') as $user) {
+        foreach ($this->providers_model->get(null, null, null, 'first_name ASC, last_name ASC') as $user) {
             $providers[] = [
                 'id' => (int) $user['id'],
                 'name' => trim($user['first_name'] . ' ' . $user['last_name']),
@@ -87,7 +86,7 @@ class Google_calendar_settings extends EA_Controller
                 throw new InvalidArgumentException('Google Calendar provider is required.');
             }
 
-            $user = $this->users_model->find($provider_id);
+            $user = $this->providers_model->find($provider_id);
 
             if (
                 !filter_var($user['settings']['google_sync'] ?? false, FILTER_VALIDATE_BOOLEAN) ||
