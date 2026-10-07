@@ -5,6 +5,46 @@ App.Pages.GoogleCalendarSettings = (function () {
     const $onlineCalendars = $('#google-online-conflict-calendars');
     const $liveCalendars = $('#google-live-conflict-calendars');
     const $loadCalendars = $('#load-google-calendars');
+    const $connectGoogle = $('#connect-google-account');
+    const $accountStatus = $('#google-account-status');
+
+    function updateConnectionUi() {
+        const $option = $provider.find('option:selected');
+        const connected = $option.data('google-connected') === 1 || $option.data('google-connected') === '1';
+
+        $connectGoogle.prop('disabled', !$provider.val());
+        $connectGoogle.html(
+            connected
+                ? '<i class="fab fa-google me-1"></i>Reconnect Google Calendar'
+                : '<i class="fab fa-google me-1"></i>Connect Google Calendar',
+        );
+        $accountStatus.text(
+            connected
+                ? 'Google Calendar is connected for this provider.'
+                : $provider.val()
+                    ? 'Google Calendar is not connected yet.'
+                    : 'Select a provider and connect its Google account.',
+        );
+    }
+
+    function connectGoogleAccount() {
+        const providerId = $provider.val();
+
+        if (!providerId) {
+            return;
+        }
+
+        const url = App.Utils.Url.siteUrl('google/oauth/' + providerId);
+        const popup = window.open(
+            url,
+            'google_calendar_oauth',
+            'width=600,height=700,resizable=yes,scrollbars=yes',
+        );
+
+        if (!popup) {
+            App.Layouts.Backend.displayNotification('Please allow popups for the scheduler.');
+        }
+    }
 
     function parseList(value) {
         try {
@@ -112,8 +152,21 @@ App.Pages.GoogleCalendarSettings = (function () {
             $writeCalendar.data('saved-value', '');
             $onlineCalendars.data('saved-values', []);
             $liveCalendars.data('saved-values', []);
+            updateConnectionUi();
             loadCalendars();
         });
+
+        $connectGoogle.on('click', connectGoogleAccount);
+
+        window.addEventListener('message', (event) => {
+            if (event.origin !== window.location.origin || event.data !== 'oauth_success') {
+                return;
+            }
+
+            window.location.reload();
+        });
+
+        updateConnectionUi();
 
         $loadCalendars.on('click', loadCalendars);
         $saveSettings.on('click', onSaveSettingsClick);
