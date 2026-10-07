@@ -530,7 +530,8 @@ class Google extends EA_Controller
 
             $this->providers_model->set_setting($oauth_provider_id, 'google_sync', true);
             $this->providers_model->set_setting($oauth_provider_id, 'google_token', json_encode($token));
-            $this->providers_model->set_setting($oauth_provider_id, 'google_calendar', 'primary');
+            $default_calendar = config('google_default_calendar') ?: 'primary';
+            $this->providers_model->set_setting($oauth_provider_id, 'google_calendar', $default_calendar);
             session(['oauth_provider_id' => null]);
 
             // Notify the opener that OAuth completed successfully, then close this popup. Using
