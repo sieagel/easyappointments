@@ -56,7 +56,7 @@ class Google_calendar_settings extends EA_Controller
         script_vars([
             'user_id' => $user_id,
             'role_slug' => session('role_slug'),
-            'google_calendar_settings' => filter_sensitive_settings($google_calendar_settings),
+            'google_calendar_settings' => array_merge(\n                filter_sensitive_settings($google_calendar_settings),\n                [['name' => 'google_client_secret', 'value' => setting('google_client_secret', '') !== '' ? '********' : '']],\n            ),
             'google_calendar_providers' => $providers,
         ]);
 
@@ -136,7 +136,7 @@ class Google_calendar_settings extends EA_Controller
                     continue;
                 }
 
-                // Never send the stored Google client secret back to the browser.\n                // An empty secret means “leave the existing secret unchanged”.\n                if ($item['name'] === 'google_client_secret' && trim((string) ($item['value'] ?? '')) === '') {\n                    continue;\n                }\n\n                setting([$item['name'] => $item['value'] ?? '']);
+                // The browser only receives a masked marker, never the real secret.\n                // Empty or masked values mean “leave the existing secret unchanged”.\n                if (\n                    $item['name'] === 'google_client_secret' &&\n                    in_array(trim((string) ($item['value'] ?? '')), ['', '********'], true)\n                ) {\n                    continue;\n                }\n\n                setting([$item['name'] => $item['value'] ?? '']);
             }
 
             response();
