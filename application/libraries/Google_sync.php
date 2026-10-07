@@ -103,7 +103,6 @@ class Google_sync
     {
         // Keep TLS certificate verification enabled for Google API requests.
         $this->client = new Google_Client();
-        $this->client->setHttpClient($http);
         $this->client->setApplicationName('Easy!Appointments');
         $this->client->setClientId($this->get_client_id());
         $this->client->setClientSecret($this->get_client_secret());
