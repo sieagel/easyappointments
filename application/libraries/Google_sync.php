@@ -23,6 +23,12 @@ use Google\Service\Calendar\Events;
  */
 class Google_sync
 {
+    /** Number of attempts to retrieve an asynchronously-created Google Meet conference. */
+    public const MEETING_LINK_ATTEMPTS = 3;
+
+    /** Microseconds between Google Meet conference retrieval attempts. */
+    public const MEETING_LINK_ATTEMPT_INTERVAL = 500000;
+
     /**
      * @var EA_Controller|CI_Controller
      */
@@ -193,7 +199,7 @@ class Google_sync
      * @throws Exception
      */
     public function add_appointment(
-        array $appointment,
+        array &$appointment,
         array $provider,
         array $service,
         array $customer,
@@ -245,19 +251,14 @@ class Google_sync
             'conferenceDataVersion' => 1,
         ]);
 
-        // If Google Meet was enabled and a link was generated, update the appointment's meeting_link
-        if (
-            filter_var(setting('google_meet_link_generation'), FILTER_VALIDATE_BOOLEAN) &&
-            $created_event->getConferenceData() &&
-            $created_event->getConferenceData()->getEntryPoints()
-        ) {
-            $entry_points = $created_event->getConferenceData()->getEntryPoints();
-            foreach ($entry_points as $entry_point) {
-                if ($entry_point->getEntryPointType() === 'video') {
-                    $appointment['meeting_link'] = $entry_point->getUri();
-                    $this->CI->appointments_model->save($appointment);
-                    break;
-                }
+        // Google creates the conference asynchronously. Fetch the event again when necessary
+        // so the generated Meet URL is reliably stored in the appointment record.
+        if (filter_var(setting('google_meet_link_generation'), FILTER_VALIDATE_BOOLEAN)) {
+            $meeting_link = $this->get_meeting_link($created_event, $provider['settings']['google_calendar']);
+
+            if ($meeting_link) {
+                $appointment['meeting_link'] = $meeting_link;
+                $this->CI->appointments_model->save($appointment);
             }
         }
 
@@ -281,7 +282,7 @@ class Google_sync
      * @throws Exception
      */
     public function update_appointment(
-        array $appointment,
+        array &$appointment,
         array $provider,
         array $service,
         array $customer,
@@ -342,24 +343,50 @@ class Google_sync
             ['conferenceDataVersion' => 1],
         );
 
-        // If Google Meet was enabled and a link was generated, update the appointment's meeting_link
+        // Google creates the conference asynchronously. Fetch the event again when necessary
+        // so the generated Meet URL is reliably stored in the appointment record.
         if (
             filter_var(setting('google_meet_link_generation'), FILTER_VALIDATE_BOOLEAN) &&
-            $updated_event->getConferenceData() &&
-            $updated_event->getConferenceData()->getEntryPoints() &&
             empty($appointment['meeting_link'])
         ) {
-            $entry_points = $updated_event->getConferenceData()->getEntryPoints();
-            foreach ($entry_points as $entry_point) {
-                if ($entry_point->getEntryPointType() === 'video') {
-                    $appointment['meeting_link'] = $entry_point->getUri();
-                    $this->CI->appointments_model->save($appointment);
-                    break;
-                }
+            $meeting_link = $this->get_meeting_link($updated_event, $provider['settings']['google_calendar']);
+
+            if ($meeting_link) {
+                $appointment['meeting_link'] = $meeting_link;
+                $this->CI->appointments_model->save($appointment);
             }
         }
 
         return $updated_event;
+    }
+
+    /**
+     * Get the Google Meet link of an event, waiting for the conference to be created if needed.
+     *
+     * @param Event $event Google Calendar event.
+     * @param string $calendar_id Google Calendar ID.
+     * @return string|null
+     * @throws Google\\Service\\Exception
+     */
+    protected function get_meeting_link(Event $event, string $calendar_id): ?string
+    {
+        for ($attempt = 0; ; $attempt++) {
+            foreach ($event->getConferenceData()?->getEntryPoints() ?? [] as $entry_point) {
+                if ($entry_point->getEntryPointType() === 'video') {
+                    return $entry_point->getUri();
+                }
+            }
+
+            $status = $event->getConferenceData()?->getCreateRequest()?->getStatus()?->getStatusCode();
+
+            if ($status !== 'pending' || $attempt === self::MEETING_LINK_ATTEMPTS) {
+                return null;
+            }
+
+            usleep(self::MEETING_LINK_ATTEMPT_INTERVAL);
+
+            $event = $this->service->events->get($calendar_id, $event->getId());
+        }
     }
 
     /**
