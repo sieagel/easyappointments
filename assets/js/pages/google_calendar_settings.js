@@ -23,6 +23,8 @@ App.Pages.GoogleCalendarSettings = (function () {
                 $field.prop('checked', Boolean(Number(setting.value)));
             } else if ($field.is('select[multiple]')) {
                 $field.data('saved-values', parseList(setting.value));
+            } else if ($field.attr('id') === 'google-write-calendar') {
+                $field.data('saved-value', setting.value || '');
             } else {
                 $field.val(setting.value);
             }
