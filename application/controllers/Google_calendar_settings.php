@@ -140,7 +140,16 @@ class Google_calendar_settings extends EA_Controller
                     continue;
                 }
 
-                // The browser only receives a masked marker, never the real secret.\n                // Empty or masked values mean “leave the existing secret unchanged”.\n                if (\n                    $item['name'] === 'google_client_secret' &&\n                    in_array(trim((string) ($item['value'] ?? '')), ['', '********'], true)\n                ) {\n                    continue;\n                }\n\n                $existing_setting = $this->settings_model->query()
+                // The browser only receives a masked marker, never the real secret.
+                // Empty or masked values mean “leave the existing secret unchanged”.
+                if (
+                    $item['name'] === 'google_client_secret' &&
+                    in_array(trim((string) ($item['value'] ?? '')), ['', '********'], true)
+                ) {
+                    continue;
+                }
+
+                $existing_setting = $this->settings_model->query()
                     ->where('name', $item['name'])
                     ->get()
                     ->row_array();
