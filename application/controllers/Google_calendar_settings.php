@@ -13,40 +13,20 @@ class Google_calendar_settings extends EA_Controller
             show_error('Forbidden', 403);
         }
 
-        $this->load->model('roles_model');
-        $this->load->model('providers_model');
         $this->load->model('users_model');
+        $this->load->model('providers_model');
         $this->load->model('settings_model');
         $this->load->library('google_sync');
     }
 
     public function index(): void
     {
-        $user_id = session('user_id');
-
-        // Show all providers so a Google account can be connected from this page.
-        // Also include the currently logged-in user when they are not assigned the
-        // provider role. Easy!Appointments installations commonly use an administrator
-        // account as the actual service/calendar owner.
         $providers = [];
-        $provider_ids = [];
 
-        foreach ($this->providers_model->get() as $provider) {
-            $provider_id = (int) $provider['id'];
-            $provider_ids[] = $provider_id;
-
-            $providers[] = [
-                'id' => $provider_id,
-                'name' => trim($provider['first_name'] . ' ' . $provider['last_name']),
-                'google_connected' =>
-                    filter_var($provider['settings']['google_sync'] ?? false, FILTER_VALIDATE_BOOLEAN) &&
-                    !empty($provider['settings']['google_token']),
-            ];
-        }
-
-        if ($user_id && !in_array((int) $user_id, $provider_ids, true)) {
-            $user = $this->users_model->find((int) $user_id);
-
+        // Google Calendar ownership is independent from the E!A provider role.
+        // List all users so the administrator can explicitly choose which E!A
+        // account owns the Google OAuth connection.
+        foreach ($this->users_model->get(null, null, null, 'first_name ASC, last_name ASC') as $user) {
             $providers[] = [
                 'id' => (int) $user['id'],
                 'name' => trim($user['first_name'] . ' ' . $user['last_name']),
@@ -75,7 +55,7 @@ class Google_calendar_settings extends EA_Controller
         ];
 
         script_vars([
-            'user_id' => $user_id,
+            'user_id' => session('user_id'),
             'role_slug' => session('role_slug'),
             'google_calendar_settings' => array_merge(
                 filter_sensitive_settings($google_calendar_settings),
@@ -87,7 +67,7 @@ class Google_calendar_settings extends EA_Controller
         html_vars([
             'page_title' => lang('settings'),
             'active_menu' => PRIV_SYSTEM_SETTINGS,
-            'user_display_name' => $this->accounts->get_user_display_name($user_id),
+            'user_display_name' => $this->accounts->get_user_display_name(session('user_id')),
         ]);
 
         $this->load->view('pages/google_calendar_settings');
@@ -107,19 +87,19 @@ class Google_calendar_settings extends EA_Controller
                 throw new InvalidArgumentException('Google Calendar provider is required.');
             }
 
-            $provider = $this->providers_model->find($provider_id);
+            $user = $this->users_model->find($provider_id);
 
             if (
-                !filter_var($provider['settings']['google_sync'] ?? false, FILTER_VALIDATE_BOOLEAN) ||
-                empty($provider['settings']['google_token'])
+                !filter_var($user['settings']['google_sync'] ?? false, FILTER_VALIDATE_BOOLEAN) ||
+                empty($user['settings']['google_token'])
             ) {
-                throw new RuntimeException('The selected provider has no active Google Calendar connection.');
+                throw new RuntimeException('The selected Google account has no active Calendar connection.');
             }
 
-            $google_token = json_decode($provider['settings']['google_token'], true);
+            $google_token = json_decode($user['settings']['google_token'], true);
 
             if (empty($google_token['refresh_token'])) {
-                throw new RuntimeException('The selected provider has no Google refresh token.');
+                throw new RuntimeException('The selected Google account has no Google refresh token.');
             }
 
             $this->google_sync->refresh_token($google_token['refresh_token']);
@@ -163,8 +143,6 @@ class Google_calendar_settings extends EA_Controller
                 $name = (string) $item['name'];
                 $value = $item['value'] ?? '';
 
-                // The browser only receives a masked marker, never the real secret.
-                // Empty or masked values mean “leave the existing secret unchanged”.
                 if (
                     $name === 'google_client_secret' &&
                     in_array(trim((string) $value), ['', '********'], true)
@@ -172,8 +150,6 @@ class Google_calendar_settings extends EA_Controller
                     continue;
                 }
 
-                // Use E!A's canonical setting() helper so inserts and updates follow
-                // exactly the same persistence path as the rest of the application.
                 setting([$name => $value]);
             }
 
