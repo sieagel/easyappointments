@@ -53,4 +53,6 @@ class Config
     // const GOOGLE_SYNC_FEATURE = false;
     // const GOOGLE_CLIENT_ID = '';
     // const GOOGLE_CLIENT_SECRET = '';
-}
+
+    // Calendar routing is configured in Settings > Integrations > Google Calendar.
+    // Do not put real Google Calendar IDs in this file.

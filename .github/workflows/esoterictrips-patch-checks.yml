@@ -1,0 +1,48 @@
+name: EsotericTrips Patch Checks
+
+on:
+  push:
+    branches:
+      - leon-google-calendar-meet
+  pull_request:
+
+jobs:
+  php-syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+
+      - name: PHP syntax check
+        run: |
+          php -l application/config/google.php
+          php -l application/controllers/Google.php
+          php -l application/controllers/Google_calendar_settings.php
+          php -l application/controllers/Calendar.php
+          php -l application/libraries/Availability.php
+          php -l application/libraries/Google_sync.php
+          php -l application/libraries/Synchronization.php
+          php -l esoterictrips-patch-install.php
+
+      - name: Build current EsotericTrips patch ZIP
+        run: |
+          rm -rf release
+          mkdir -p release/patch
+
+          cp --parents application/config/google.php application/controllers/Google.php application/controllers/Google_calendar_settings.php application/controllers/Calendar.php application/language/english/translations_lang.php application/language/slovenian/translations_lang.php application/libraries/Availability.php application/libraries/Google_sync.php application/libraries/Synchronization.php application/views/pages/google_calendar_settings.php assets/js/http/google_calendar_settings_http_client.js assets/js/pages/google_calendar_settings.js assets/js/utils/calendar_sync.js release/patch/
+
+          cp esoterictrips-patch-install.php release/esoterictrips-patch-install.php
+
+          printf '%s\\n' 'EsotericTrips Easy!Appointments current patch' '' '1. BACK UP the current Easy!Appointments files and database.' '2. Upload this ZIP to the Easy!Appointments installation root.' '3. Extract it there.' '4. Open esoterictrips-patch-install.php in your browser.' '5. Click INSTALL PATCH.' '6. Configure Google Calendar routing in Settings > Integrations > Google Calendar.' '7. Test an online booking, Google Meet generation and calendar conflict checking.' '8. DELETE esoterictrips-patch-install.php and the patch directory after successful testing.' '' 'This package contains the current branch files required for the EsotericTrips Google Calendar routing patch.' 'It does not replace the root config.php, database credentials or OAuth client credentials.' > release/README-INSTALL.txt
+
+          cd release
+          zip -r ../esoterictrips-ea-patch-current.zip .
+
+      - name: Upload current patch artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: esoterictrips-ea-patch-${{ github.run_number }}
+          path: esoterictrips-ea-patch-current.zip
+          if-no-files-found: error

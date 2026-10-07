@@ -43,6 +43,7 @@ class Availability
         $this->CI->load->model('working_plan_exceptions_model');
 
         $this->CI->load->library('ics_file');
+        $this->CI->load->library('google_sync');
     }
 
     /**
@@ -74,6 +75,13 @@ class Availability
 
             $available_hours = $this->generate_available_hours($date, $service, $available_periods);
         }
+
+        $available_hours = $this->apply_secondary_google_calendar_conflicts(
+            $date,
+            $service,
+            $provider,
+            $available_hours,
+        );
 
         $available_hours = $this->consider_book_advance_timeout($date, $available_hours, $provider);
 
@@ -568,6 +576,131 @@ class Availability
         }
 
         return $available_hours;
+    }
+
+    /**
+     * Remove appointment slots that overlap a configured secondary Google Calendar.
+     *
+     * The secondary calendar is used only for selected in-person service locations.
+     * It is read for conflicts but never receives Easy!Appointments bookings.
+     *
+     * @param string $date Selected date (Y-m-d).
+     * @param array $service Service data.
+     * @param array $provider Provider data.
+     * @param array $available_hours Candidate start times.
+     *
+     * @return array Filtered available start times.
+     *
+     * @throws Exception
+     */
+    protected function apply_secondary_google_calendar_conflicts(
+        string $date,
+        array $service,
+        array $provider,
+        array $available_hours,
+    ): array {
+        if (empty($available_hours)) {
+            return $available_hours;
+        }
+
+        $service_location = trim((string) ($service['location'] ?? ''));
+        $is_online = stripos($service_location, 'online') !== false;
+
+        $setting_name = $is_online
+            ? 'google_online_conflict_calendars'
+            : 'google_live_conflict_calendars';
+
+        $configured_calendars = json_decode((string) setting($setting_name, '[]'), true);
+        $calendar_ids = is_array($configured_calendars) ? array_values(array_filter($configured_calendars)) : [];
+
+        if (empty($calendar_ids)) {
+            return $available_hours;
+        }
+
+        $google_token = $provider['settings']['google_token'] ?? null;
+
+        if (empty($google_token)) {
+            log_message(
+                'error',
+                'Google conflict calendars are configured but provider has no Google token: ' . $provider['id'],
+            );
+            return [];
+        }
+
+        $google_token = json_decode($google_token, true);
+
+        if (empty($google_token['refresh_token'])) {
+            log_message(
+                'error',
+                'Google conflict calendars are configured but provider has no refresh token: ' . $provider['id'],
+            );
+            return [];
+        }
+
+        $provider_timezone = new DateTimeZone($provider['timezone']);
+        $day_start = new DateTime($date . ' 00:00:00', $provider_timezone);
+        $day_end = (clone $day_start)->modify('+1 day');
+
+        $this->CI->google_sync->refresh_token($google_token['refresh_token']);
+
+        $busy_periods = [];
+
+        foreach ($calendar_ids as $calendar_id) {
+            try {
+                $busy_periods = array_merge(
+                    $busy_periods,
+                    $this->CI->google_sync->get_busy_periods(
+                        (string) $calendar_id,
+                        $day_start->format(DateTimeInterface::RFC3339),
+                        $day_end->format(DateTimeInterface::RFC3339),
+                    ),
+                );
+            } catch (Throwable $e) {
+                log_message(
+                    'error',
+                    'Google - Failed to read configured conflict calendar "' .
+                        $calendar_id .
+                        '": ' .
+                        $e->getMessage(),
+                );
+
+                // Fail closed: if a configured conflict calendar cannot be read,
+                // do not expose potentially unsafe availability slots.
+                return [];
+            }
+        }
+
+        if (empty($busy_periods)) {
+            return $available_hours;
+        }
+
+        $duration = (int) $service['duration'];
+        $filtered_hours = [];
+
+        foreach ($available_hours as $available_hour) {
+            $slot_start = new DateTime($date . ' ' . $available_hour . ':00', $provider_timezone);
+            $slot_end = (clone $slot_start)->modify('+' . $duration . ' minutes');
+
+            $slot_start_timestamp = $slot_start->getTimestamp();
+            $slot_end_timestamp = $slot_end->getTimestamp();
+            $conflicts = false;
+
+            foreach ($busy_periods as $busy_period) {
+                if (
+                    $slot_start_timestamp < $busy_period['end'] &&
+                    $slot_end_timestamp > $busy_period['start']
+                ) {
+                    $conflicts = true;
+                    break;
+                }
+            }
+
+            if (!$conflicts) {
+                $filtered_hours[] = $available_hour;
+            }
+        }
+
+        return $filtered_hours;
     }
 
     /**

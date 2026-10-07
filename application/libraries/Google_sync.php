@@ -23,6 +23,12 @@ use Google\Service\Calendar\Events;
  */
 class Google_sync
 {
+    /** Number of attempts to retrieve an asynchronously-created Google Meet conference. */
+    public const MEETING_LINK_ATTEMPTS = 3;
+
+    /** Microseconds between Google Meet conference retrieval attempts. */
+    public const MEETING_LINK_ATTEMPT_INTERVAL = 500000;
+
     /**
      * @var EA_Controller|CI_Controller
      */
@@ -91,16 +97,39 @@ class Google_sync
     }
 
     /**
+     * Return the calendar selected in Settings > Integrations > Google Calendar for writing/sync.
+     *
+     * No Google calendar is assumed here: an explicit calendar must be selected in the E!A settings UI.
+     */
+    public function get_write_calendar(array $provider): string
+    {
+        $configured_provider_id = (int) setting('google_calendar_provider_id', 0);
+        $provider_id = (int) ($provider['id'] ?? 0);
+
+        if ($configured_provider_id > 0 && $provider_id !== $configured_provider_id) {
+            throw new RuntimeException(
+                'The selected Google Calendar account does not match the appointment provider.',
+            );
+        }
+
+        $calendar_id = trim((string) setting('google_write_calendar', ''));
+
+        if ($calendar_id === '') {
+            throw new RuntimeException(
+                'No Google Calendar write calendar is configured. Select one in Settings > Integrations > Google Calendar.',
+            );
+        }
+
+        return $calendar_id;
+    }
+
+    /**
      * Initialize the client, so that existing execution errors are not passed from one provider to another.
      */
     public function initialize_clients(): void
     {
-        $http = new GuzzleHttp\Client([
-            'verify' => false,
-        ]);
-
+        // Keep TLS certificate verification enabled for Google API requests.
         $this->client = new Google_Client();
-        $this->client->setHttpClient($http);
         $this->client->setApplicationName('Easy!Appointments');
         $this->client->setClientId($this->get_client_id());
         $this->client->setClientSecret($this->get_client_secret());
@@ -193,7 +222,7 @@ class Google_sync
      * @throws Exception
      */
     public function add_appointment(
-        array $appointment,
+        array &$appointment,
         array $provider,
         array $service,
         array $customer,
@@ -241,23 +270,18 @@ class Google_sync
         }
 
         // Add the new event to the Google Calendar.
-        $created_event = $this->service->events->insert($provider['settings']['google_calendar'], $event, [
+        $created_event = $this->service->events->insert($this->get_write_calendar($provider), $event, [
             'conferenceDataVersion' => 1,
         ]);
 
-        // If Google Meet was enabled and a link was generated, update the appointment's meeting_link
-        if (
-            filter_var(setting('google_meet_link_generation'), FILTER_VALIDATE_BOOLEAN) &&
-            $created_event->getConferenceData() &&
-            $created_event->getConferenceData()->getEntryPoints()
-        ) {
-            $entry_points = $created_event->getConferenceData()->getEntryPoints();
-            foreach ($entry_points as $entry_point) {
-                if ($entry_point->getEntryPointType() === 'video') {
-                    $appointment['meeting_link'] = $entry_point->getUri();
-                    $this->CI->appointments_model->save($appointment);
-                    break;
-                }
+        // Google creates the conference asynchronously. Fetch the event again when necessary
+        // so the generated Meet URL is reliably stored in the appointment record.
+        if (filter_var(setting('google_meet_link_generation'), FILTER_VALIDATE_BOOLEAN)) {
+            $meeting_link = $this->get_meeting_link($created_event, $this->get_write_calendar($provider));
+
+            if ($meeting_link) {
+                $appointment['meeting_link'] = $meeting_link;
+                $this->CI->appointments_model->save($appointment);
             }
         }
 
@@ -281,14 +305,14 @@ class Google_sync
      * @throws Exception
      */
     public function update_appointment(
-        array $appointment,
+        array &$appointment,
         array $provider,
         array $service,
         array $customer,
         array $settings,
     ): Event {
         $event = $this->service->events->get(
-            $provider['settings']['google_calendar'],
+            $this->get_write_calendar($provider),
             $appointment['id_google_calendar'],
         );
 
@@ -336,30 +360,56 @@ class Google_sync
         }
 
         $updated_event = $this->service->events->update(
-            $provider['settings']['google_calendar'],
+            $this->get_write_calendar($provider),
             $event->getId(),
             $event,
             ['conferenceDataVersion' => 1],
         );
 
-        // If Google Meet was enabled and a link was generated, update the appointment's meeting_link
+        // Google creates the conference asynchronously. Fetch the event again when necessary
+        // so the generated Meet URL is reliably stored in the appointment record.
         if (
             filter_var(setting('google_meet_link_generation'), FILTER_VALIDATE_BOOLEAN) &&
-            $updated_event->getConferenceData() &&
-            $updated_event->getConferenceData()->getEntryPoints() &&
             empty($appointment['meeting_link'])
         ) {
-            $entry_points = $updated_event->getConferenceData()->getEntryPoints();
-            foreach ($entry_points as $entry_point) {
-                if ($entry_point->getEntryPointType() === 'video') {
-                    $appointment['meeting_link'] = $entry_point->getUri();
-                    $this->CI->appointments_model->save($appointment);
-                    break;
-                }
+            $meeting_link = $this->get_meeting_link($updated_event, $this->get_write_calendar($provider));
+
+            if ($meeting_link) {
+                $appointment['meeting_link'] = $meeting_link;
+                $this->CI->appointments_model->save($appointment);
             }
         }
 
         return $updated_event;
+    }
+
+    /**
+     * Get the Google Meet link of an event, waiting for the conference to be created if needed.
+     *
+     * @param Event $event Google Calendar event.
+     * @param string $calendar_id Google Calendar ID.
+     * @return string|null
+     * @throws Google\\Service\\Exception
+     */
+    protected function get_meeting_link(Event $event, string $calendar_id): ?string
+    {
+        for ($attempt = 0; ; $attempt++) {
+            foreach ($event->getConferenceData()?->getEntryPoints() ?? [] as $entry_point) {
+                if ($entry_point->getEntryPointType() === 'video') {
+                    return $entry_point->getUri();
+                }
+            }
+
+            $status = $event->getConferenceData()?->getCreateRequest()?->getStatus()?->getStatusCode();
+
+            if ($status !== 'pending' || $attempt === self::MEETING_LINK_ATTEMPTS) {
+                return null;
+            }
+
+            usleep(self::MEETING_LINK_ATTEMPT_INTERVAL);
+
+            $event = $this->service->events->get($calendar_id, $event->getId());
+        }
     }
 
     /**
@@ -372,7 +422,7 @@ class Google_sync
      */
     public function delete_appointment(array $provider, string $google_event_id): void
     {
-        $this->service->events->delete($provider['settings']['google_calendar'], $google_event_id);
+        $this->service->events->delete($this->get_write_calendar($provider), $google_event_id);
     }
 
     /**
@@ -402,7 +452,7 @@ class Google_sync
         $event->setEnd($end);
 
         // Add the new event to the Google Calendar.
-        return $this->service->events->insert($provider['settings']['google_calendar'], $event);
+        return $this->service->events->insert($this->get_write_calendar($provider), $event);
     }
 
     /**
@@ -418,7 +468,7 @@ class Google_sync
     public function update_unavailability(array $provider, array $unavailability): Google_Service_Calendar_Event
     {
         $event = $this->service->events->get(
-            $provider['settings']['google_calendar'],
+            $this->get_write_calendar($provider),
             $unavailability['id_google_calendar'],
         );
 
@@ -435,7 +485,7 @@ class Google_sync
         $end = $this->build_event_datetime($unavailability['end_datetime'], $timezone, $is_all_day, true);
         $event->setEnd($end);
 
-        return $this->service->events->update($provider['settings']['google_calendar'], $event->getId(), $event);
+        return $this->service->events->update($this->get_write_calendar($provider), $event->getId(), $event);
     }
 
     /**
@@ -448,7 +498,135 @@ class Google_sync
      */
     public function delete_unavailability(array $provider, string $google_event_id): void
     {
-        $this->service->events->delete($provider['settings']['google_calendar'], $google_event_id);
+        $this->service->events->delete($this->get_write_calendar($provider), $google_event_id);
+    }
+
+    /**
+     * Get busy periods from a Google Calendar within a time range.
+     *
+     * Transparent (Free) and cancelled events are ignored. This is used for
+     * secondary conflict calendars that must affect availability without
+     * receiving Easy!Appointments bookings themselves.
+     *
+     * @param string $google_calendar Google Calendar ID.
+     * @param string $start Start datetime (RFC3339-compatible).
+     * @param string $end End datetime (RFC3339-compatible).
+     *
+     * @return array<int,array{start:int,end:int}>
+     *
+     * @throws Google\Service\Exception
+     */
+    public function get_busy_periods(string $google_calendar, string $start, string $end): array
+    {
+        $google_calendar = $this->resolve_calendar_identifier($google_calendar);
+
+        $params = [
+            'timeMin' => (new DateTime($start))->format(DateTimeInterface::RFC3339),
+            'timeMax' => (new DateTime($end))->format(DateTimeInterface::RFC3339),
+            'singleEvents' => true,
+            'orderBy' => 'startTime',
+            'maxResults' => 2500,
+        ];
+
+        $events = $this->service->events->listEvents($google_calendar, $params);
+        $busy_periods = [];
+
+        do {
+            foreach ($events->getItems() as $event) {
+                if ($event->getStatus() === 'cancelled') {
+                    continue;
+                }
+
+                if (strcasecmp((string) $event->getTransparency(), 'transparent') === 0) {
+                    continue;
+                }
+
+                $event_start = $event->getStart();
+                $event_end = $event->getEnd();
+
+                if (!$event_start || !$event_end) {
+                    continue;
+                }
+
+                if ($event_start->getDateTime() !== null && $event_end->getDateTime() !== null) {
+                    $busy_periods[] = [
+                        'start' => (new DateTime($event_start->getDateTime()))->getTimestamp(),
+                        'end' => (new DateTime($event_end->getDateTime()))->getTimestamp(),
+                    ];
+                    continue;
+                }
+
+                if ($event_start->getDate() !== null && $event_end->getDate() !== null) {
+                    $all_day_start = new DateTime($event_start->getDate() . ' 00:00:00');
+                    $all_day_end = new DateTime($event_end->getDate() . ' 00:00:00');
+                    $busy_periods[] = [
+                        'start' => $all_day_start->getTimestamp(),
+                        'end' => $all_day_end->getTimestamp(),
+                    ];
+                }
+            }
+
+            $next_page_token = $events->getNextPageToken();
+
+            if (empty($next_page_token)) {
+                break;
+            }
+
+            $params['pageToken'] = $next_page_token;
+            $events = $this->service->events->listEvents($google_calendar, $params);
+        } while (true);
+
+        return $busy_periods;
+    }
+
+    /**
+     * Resolve a Google Calendar ID or a human-readable calendar name.
+     *
+     * Calendar IDs are used as-is. For convenience, a configured secondary
+     * calendar may instead be specified by its visible calendar name (for
+     * example "Manas"). This keeps private calendar IDs out of the installation
+     * package and public repository.
+     *
+     * @param string $identifier Google Calendar ID or visible calendar name.
+     *
+     * @return string Resolved Google Calendar ID.
+     *
+     * @throws Google\Service\Exception
+     */
+    private function resolve_calendar_identifier(string $identifier): string
+    {
+        $identifier = trim($identifier);
+
+        if ($identifier === '' || $identifier === 'primary' || str_contains($identifier, '@group.calendar.google.com')) {
+            return $identifier;
+        }
+
+        $calendars = $this->service->calendarList->listCalendarList([
+            'maxResults' => 250,
+            'showDeleted' => false,
+        ]);
+
+        do {
+            foreach ($calendars->getItems() as $calendar) {
+                if (strcasecmp(trim((string) $calendar->getSummary()), $identifier) === 0) {
+                    return $calendar->getId();
+                }
+            }
+
+            $next_page_token = $calendars->getNextPageToken();
+
+            if (empty($next_page_token)) {
+                break;
+            }
+
+            $calendars = $this->service->calendarList->listCalendarList([
+                'maxResults' => 250,
+                'showDeleted' => false,
+                'pageToken' => $next_page_token,
+            ]);
+        } while (true);
+
+        throw new RuntimeException('Google Calendar not found by ID or name: ' . $identifier);
     }
 
     /**
@@ -463,7 +641,7 @@ class Google_sync
      */
     public function get_event(array $provider, string $google_event_id): Event
     {
-        return $this->service->events->get($provider['settings']['google_calendar'], $google_event_id);
+        return $this->service->events->get($this->get_write_calendar($provider), $google_event_id);
     }
 
     /**
