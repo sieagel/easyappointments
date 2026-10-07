@@ -101,10 +101,7 @@ class Google_sync
      */
     public function initialize_clients(): void
     {
-        $http = new GuzzleHttp\Client([
-            'verify' => false,
-        ]);
-
+        // Keep TLS certificate verification enabled for Google API requests.
         $this->client = new Google_Client();
         $this->client->setHttpClient($http);
         $this->client->setApplicationName('Easy!Appointments');
