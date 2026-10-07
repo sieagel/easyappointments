@@ -514,6 +514,7 @@ $lang['google_online_conflict_calendars'] = 'Conflict calendars – online servi
 $lang['google_online_conflict_calendars_info'] = 'These calendars are read-only conflict sources for online services.';
 $lang['google_live_conflict_calendars'] = 'Conflict calendars – live services';
 $lang['google_live_conflict_calendars_info'] = 'These calendars are read-only conflict sources for live/in-person services.';
+$lang['google_calendar_select_in_settings'] = 'Select Google calendars under Settings → Integrations → Google Calendar.';
 $lang['google_calendar_calendars_load_failed'] = 'Google calendars could not be loaded.';
 $lang['google_calendar_info'] = 'Enable Google Calendar synchronization to sync appointments with provider Google Calendar accounts.';
 $lang['google_client_id'] = 'Client ID';
