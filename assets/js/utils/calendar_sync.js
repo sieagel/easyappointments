@@ -80,7 +80,7 @@ App.Utils.CalendarSync = (function () {
 
             updateSyncButtons();
 
-            selectGoogleCalendar();
+            App.Layouts.Backend.displayNotification(lang('google_calendar_select_in_settings'));
         }
 
         window.addEventListener('message', onOauthMessage);
@@ -123,43 +123,6 @@ App.Utils.CalendarSync = (function () {
                 },
             },
         ]);
-    }
-
-    function selectGoogleCalendar() {
-        const providerId = $selectFilterItem.val();
-
-        App.Http.Google.getGoogleCalendars(providerId).done((googleCalendars) => {
-            const $selectGoogleCalendar = $(`
-                <select class="form-select">
-                    <!-- JS -->
-                </select>
-            `);
-
-            googleCalendars.forEach((googleCalendar) => {
-                $selectGoogleCalendar.append(new Option(googleCalendar.summary, googleCalendar.id));
-            });
-
-            const $messageModal = App.Utils.Message.show(
-                lang('select_sync_calendar'),
-                lang('select_sync_calendar_prompt'),
-                [
-                    {
-                        text: lang('select'),
-                        click: (event, messageModal) => {
-                            const googleCalendarId = $selectGoogleCalendar.val();
-
-                            App.Http.Google.selectGoogleCalendar(providerId, googleCalendarId).done(() => {
-                                App.Layouts.Backend.displayNotification(lang('sync_calendar_selected'));
-                            });
-
-                            messageModal.hide();
-                        },
-                    },
-                ],
-            );
-
-            $selectGoogleCalendar.appendTo($messageModal.find('.modal-body'));
-        });
     }
 
     function triggerGoogleSync() {
