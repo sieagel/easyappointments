@@ -10,7 +10,7 @@ App.Pages.GoogleCalendarSettings = (function () {
 
     function isProviderConnected() {
         const $option = $provider.find('option:selected');
-        return $option.data('google-connected') === 1 || $option.data('google-connected') === '1';
+        return $option.attr('data-google-connected') === '1';
     }
 
     function updateConnectionUi() {
@@ -32,7 +32,9 @@ App.Pages.GoogleCalendarSettings = (function () {
         );
     }
 
-    function connectGoogleAccount() {
+    function connectGoogleAccount(event) {
+        event.preventDefault();
+        event.stopPropagation();
         const providerId = $provider.val();
 
         if (!providerId) {
@@ -151,6 +153,8 @@ App.Pages.GoogleCalendarSettings = (function () {
     }
 
     function initialize() {
+        $connectGoogle.off('click.googleCalendar').on('click.googleCalendar', connectGoogleAccount);
+
         deserialize(vars('google_calendar_settings'));
 
         $provider.on('change', () => {
@@ -160,8 +164,6 @@ App.Pages.GoogleCalendarSettings = (function () {
             updateConnectionUi();
             loadCalendars();
         });
-
-        $connectGoogle.on('click', connectGoogleAccount);
 
         window.addEventListener('message', (event) => {
             if (event.origin !== window.location.origin || event.data !== 'oauth_success') {
@@ -181,7 +183,11 @@ App.Pages.GoogleCalendarSettings = (function () {
         }
     }
 
-    document.addEventListener('DOMContentLoaded', initialize);
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initialize, {once: true});
+    } else {
+        initialize();
+    }
 
     return {};
 })();
