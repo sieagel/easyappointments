@@ -1,0 +1,23 @@
+name: EsotericTrips Patch Checks
+
+on:
+  push:
+    branches:
+      - leon-google-calendar-meet
+  pull_request:
+
+jobs:
+  php-syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+      - name: PHP syntax check
+        run: |
+          php -l application/config/google.php
+          php -l application/controllers/Google.php
+          php -l application/libraries/Availability.php
+          php -l application/libraries/Google_sync.php
+          php -l application/libraries/Synchronization.php
