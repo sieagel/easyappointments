@@ -8,9 +8,14 @@ App.Pages.GoogleCalendarSettings = (function () {
     const $connectGoogle = $('#connect-google-account');
     const $accountStatus = $('#google-account-status');
 
+    function isProviderConnected() {
+        const $option = $provider.find('option:selected');
+        return $option.data('google-connected') === 1 || $option.data('google-connected') === '1';
+    }
+
     function updateConnectionUi() {
         const $option = $provider.find('option:selected');
-        const connected = $option.data('google-connected') === 1 || $option.data('google-connected') === '1';
+        const connected = isProviderConnected();
 
         $connectGoogle.prop('disabled', !$provider.val());
         $connectGoogle.html(
@@ -121,7 +126,7 @@ App.Pages.GoogleCalendarSettings = (function () {
     function loadCalendars() {
         const providerId = $provider.val();
 
-        if (!providerId) {
+        if (!providerId || !isProviderConnected()) {
             renderCalendars([]);
             return;
         }
