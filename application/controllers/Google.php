@@ -341,7 +341,7 @@ class Google extends EA_Controller
             show_error('Forbidden', 403);
         }
 
-        $this->users_model->find((int) $provider_id);
+        $this->providers_model->find((int) $provider_id);
 
         $oauth_state = bin2hex(random_bytes(32));
 
@@ -422,15 +422,15 @@ class Google extends EA_Controller
                 throw new Exception('Provider id is required in order to fetch the google calendars.');
             }
 
-            $user = $this->users_model->find($provider_id);
-            $google_sync = $user['settings']['google_sync'] ?? false;
+            $user = $this->providers_model->find($provider_id);
+            $google_sync = $this->providers_model->get_setting($provider_id, 'google_sync');
 
             if (!filter_var($google_sync, FILTER_VALIDATE_BOOLEAN)) {
                 json_response(['success' => false]);
                 return;
             }
 
-            $google_token = json_decode($user['settings']['google_token'] ?? '', true);
+            $google_token = json_decode($this->providers_model->get_setting($provider_id, 'google_token'), true);
 
             if (empty($google_token['refresh_token'])) {
                 throw new RuntimeException('Google refresh token is not available.');
@@ -457,8 +457,7 @@ class Google extends EA_Controller
                 throw new RuntimeException('You do not have the required permissions for this task.');
             }
 
-            $this->users_model->find($provider_id);
-            $this->users_model->set_setting($provider_id, 'google_calendar', request('calendar_id'));
+            $this->providers_model->set_setting($provider_id, 'google_calendar', request('calendar_id'));
 
             json_response(['success' => true]);
         } catch (Throwable $e) {
@@ -484,9 +483,8 @@ class Google extends EA_Controller
                 throw new RuntimeException('You do not have the required permissions for this task.');
             }
 
-            $this->users_model->find($provider_id);
-            $this->users_model->set_setting($provider_id, 'google_sync', '0');
-            $this->users_model->set_setting($provider_id, 'google_token', '');
+            $this->providers_model->set_setting($provider_id, 'google_sync', false);
+            $this->providers_model->set_setting($provider_id, 'google_token');
             $this->appointments_model->clear_google_sync_ids($provider_id);
 
             json_response(['success' => true]);
