@@ -44,7 +44,7 @@ class Google_calendar_settings extends EA_Controller
         $google_calendar_settings = [
             ['name' => 'google_sync_feature', 'value' => setting('google_sync_feature', '0')],
             ['name' => 'google_client_id', 'value' => setting('google_client_id', '')],
-            ['name' => 'google_client_secret', 'value' => setting('google_client_secret', '')],
+            ['name' => 'google_client_secret', 'value' => ''],
             ['name' => 'google_meet_link_generation', 'value' => setting('google_meet_link_generation', '0')],
             ['name' => 'display_add_to_google_calendar', 'value' => setting('display_add_to_google_calendar', '1')],
             ['name' => 'google_calendar_provider_id', 'value' => $selected_provider_id],
@@ -136,7 +136,7 @@ class Google_calendar_settings extends EA_Controller
                     continue;
                 }
 
-                setting([$item['name'] => $item['value'] ?? '']);
+                // Never send the stored Google client secret back to the browser.\n                // An empty secret means “leave the existing secret unchanged”.\n                if ($item['name'] === 'google_client_secret' && trim((string) ($item['value'] ?? '')) === '') {\n                    continue;\n                }\n\n                setting([$item['name'] => $item['value'] ?? '']);
             }
 
             response();
