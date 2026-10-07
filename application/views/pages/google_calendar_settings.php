@@ -62,14 +62,21 @@
 
                     <div class="mb-3">
                         <label for="google-calendar-provider" class="form-label"><?= lang('google_calendar_account') ?></label>
-                        <select id="google-calendar-provider" class="form-select" data-field="google_calendar_provider_id">
-                            <option value=""><?= lang('please_select') ?></option>
-                            <?php foreach (vars('google_calendar_providers') as $provider): ?>
-                                <option value="<?= (int) $provider['id'] ?>">
-                                    <?= html_escape($provider['name']) ?>
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
+                        <div class="input-group">
+                            <select id="google-calendar-provider" class="form-select" data-field="google_calendar_provider_id">
+                                <option value=""><?= lang('please_select') ?></option>
+                                <?php foreach (vars('google_calendar_providers') as $provider): ?>
+                                    <option value="<?= (int) $provider['id'] ?>"
+                                            data-google-connected="<?= !empty($provider['google_connected']) ? '1' : '0' ?>">
+                                        <?= html_escape($provider['name']) ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <button type="button" id="connect-google-account" class="btn btn-outline-primary">
+                                <i class="fab fa-google me-1"></i>Connect Google Calendar
+                            </button>
+                        </div>
+                        <div id="google-account-status" class="form-text text-muted mt-2"></div>
                         <div class="form-text text-muted"><?= lang('google_calendar_account_info') ?></div>
                     </div>
 
